@@ -1,6 +1,9 @@
 import argparse
 import os
 import sys
+from typing import Optional
+
+from cantools.database.can.message import Message
 
 from ... import database
 from ...database import Message
@@ -11,7 +14,7 @@ from ...j1939 import frame_id_unpack, is_pdu_format_1, pgn_pack
 from . import formatting
 
 
-def _print_j1939_frame_id(message):
+def _print_j1939_frame_id(message: Message) -> None:
     unpacked = frame_id_unpack(message.frame_id)
 
     print(f'      Priority:       {unpacked.priority}')
@@ -34,7 +37,7 @@ def _print_j1939_frame_id(message):
     print(f'      Destination:    {destination}')
     print(f'      Format:         {pdu_format}')
 
-def _dump_can_message(message, with_comments: bool = False, name_prefix: str = '', WIDTH=None):
+def _dump_can_message(message: Message, with_comments: bool = False, name_prefix: str = '', WIDTH: Optional[int] = None):
     cycle_time = message.cycle_time
     signal_choices_string = formatting.signal_choices_string(message)
 

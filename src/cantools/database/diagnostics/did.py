@@ -6,9 +6,6 @@ from typing import TypedDict
 from cantools.database.diagnostics.data import Data
 from cantools.typechecking import Formats, SignalDictType, SignalMappingType
 
-from cantools.database.diagnostics.data import Data
-from cantools.typechecking import SignalDictType, SignalMappingType
-
 from ..utils import create_encode_decode_formats, decode_data, encode_data
 
 
