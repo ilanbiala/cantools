@@ -34,8 +34,7 @@ def _print_j1939_frame_id(message):
     print(f'      Destination:    {destination}')
     print(f'      Format:         {pdu_format}')
 
-
-def _dump_can_message(message, with_comments=False, name_prefix='', WIDTH=None):
+def _dump_can_message(message, with_comments: bool = False, name_prefix: str = '', WIDTH=None):
     cycle_time = message.cycle_time
     signal_choices_string = formatting.signal_choices_string(message)
 
@@ -122,7 +121,8 @@ def _dump_can_messages(msg_list: list[Message], with_comments: bool = False) -> 
                           WIDTH=WIDTH)
 
 
-def _dump_diagnostics_database(dbase):
+
+def _dump_diagnostics_database(dbase: DiagnosticsDatabase) -> None:
     print('=================================== Dids ===================================')
     print()
     print('  ' + 72 * '-')
