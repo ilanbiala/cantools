@@ -89,10 +89,10 @@ def _load_data_types(ecu_doc: ElementTree.Element | None) -> dict[str, DataType]
         # Name and id.
         type_name_elem = data_type.find('NAME/TUV[1]')
         if type_name_elem is None:
-            raise KeyError(f"Could not find TUV element in DATATYPE IDENT with id{data_type.attrib.get("id")}!")
+            raise KeyError(f"Could not find TUV element in DATATYPE IDENT with id{data_type.attrib.get('id')}!")
         type_name = type_name_elem.text
         if type_name is None:
-            raise ValueError(f"Could not find name in DATATYPE IDENT with id={data_type.attrib.get("id")}!")
+            raise ValueError(f"Could not find name in DATATYPE IDENT with id={data_type.attrib.get('id')}!")
         type_id = data_type.attrib['id']
 
         # Load from C-type element.
@@ -170,10 +170,10 @@ def _load_data_element(data: ElementTree.Element, offset: int, data_types: dict[
 
     qual_elem = data.find('QUAL')
     if qual_elem is None:
-        raise ValueError(f"Could not find QUAL in data with id={data.attrib.get("id")}!")
+        raise ValueError(f"Could not find QUAL in data with id={data.attrib.get('id')}!")
     name = qual_elem.text
     if name is None:
-        raise ValueError(f"Could not get QUAL text in data with id={data.attrib.get("id")}!")
+        raise ValueError(f"Could not get QUAL text in data with id={data.attrib.get('id')}!")
 
     return Data(name=name,
                 start=dbc_start_bitnum,
