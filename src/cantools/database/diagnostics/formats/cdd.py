@@ -79,8 +79,8 @@ def _load_data_types(ecu_doc: ElementTree.Element | None) -> dict[str, DataType]
         # Default values.
         byte_order: ByteOrder = 'big_endian'
         unit = None
-        factor = 1.0
-        offset = 0.0
+        factor = 1
+        offset = 0
         bit_length = None
         encoding = None
         minimum = None
