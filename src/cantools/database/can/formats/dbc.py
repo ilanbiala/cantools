@@ -635,7 +635,7 @@ def _bus_is_canfd(database: InternalDatabase) -> bool:
     return bus_type.value == 'CAN FD'  # type: ignore[no-any-return]
 
 def _dump_attribute_definitions(database: InternalDatabase) -> list[str]:
-    ba_def = []
+    ba_def: list[str] = []
 
     if database.dbc is None:
         definitions: OrderedDict[str, AttributeDefinition] = OrderedDict()
@@ -656,7 +656,7 @@ def _dump_attribute_definitions(database: InternalDatabase) -> list[str]:
         if 'CANFD_BRS' not in definitions:
             definitions['CANFD_BRS'] = ATTRIBUTE_DEFINITION_CANFD_BRS
 
-    def get_value(definition, value):
+    def get_value(definition: AttributeDefinition, value) -> str:
         if definition.minimum is None:
             value = ''
         else:
@@ -664,13 +664,13 @@ def _dump_attribute_definitions(database: InternalDatabase) -> list[str]:
 
         return value
 
-    def get_minimum(definition):
+    def get_minimum(definition: AttributeDefinition) -> str:
         return get_value(definition, definition.minimum)
 
-    def get_maximum(definition):
+    def get_maximum(definition: AttributeDefinition) -> str:
         return get_value(definition, definition.maximum)
 
-    def get_kind(definition):
+    def get_kind(definition: AttributeDefinition) -> str:
         return '' if definition.kind is None else definition.kind + ' '
 
     for definition in definitions.values():
@@ -689,15 +689,15 @@ def _dump_attribute_definitions(database: InternalDatabase) -> list[str]:
     return ba_def
 
 
-def _dump_attribute_definitions_rel(database):
-    ba_def_rel = []
+def _dump_attribute_definitions_rel(database: InternalDatabase) -> list[str]:
+    ba_def_rel: list[str] = []
 
     if database.dbc is None:
         definitions = OrderedDict()
     else:
         definitions = database.dbc.attribute_definitions_rel
 
-    def get_value(definition, value):
+    def get_value(definition: AttributeDefinition, value) -> str:
         if definition.minimum is None:
             value = ''
         else:
@@ -705,10 +705,10 @@ def _dump_attribute_definitions_rel(database):
 
         return value
 
-    def get_minimum(definition):
+    def get_minimum(definition: AttributeDefinition) -> str:
         return get_value(definition, definition.minimum)
 
-    def get_maximum(definition):
+    def get_maximum(definition: AttributeDefinition) -> str:
         return get_value(definition, definition.maximum)
 
     for definition in definitions.values():
@@ -727,8 +727,8 @@ def _dump_attribute_definitions_rel(database):
     return ba_def_rel
 
 
-def _dump_attribute_definition_defaults(database):
-    ba_def_def = []
+def _dump_attribute_definition_defaults(database: InternalDatabase) -> list[str]:
+    ba_def_def: list[str] = []
 
     if database.dbc is None:
         definitions = OrderedDict()
@@ -748,8 +748,8 @@ def _dump_attribute_definition_defaults(database):
     return ba_def_def
 
 
-def _dump_attribute_definition_defaults_rel(database):
-    ba_def_def_rel = []
+def _dump_attribute_definition_defaults_rel(database: InternalDatabase) -> list[str]:
+    ba_def_def_rel: list[str] = []
 
     if database.dbc is None:
         definitions = OrderedDict()
@@ -769,10 +769,10 @@ def _dump_attribute_definition_defaults_rel(database):
     return ba_def_def_rel
 
 
-def _dump_attributes(database, sort_signals, sort_attributes):
+def _dump_attributes(database: InternalDatabase, sort_signals: type_sort_signals, sort_attributes: type_sort_attributes) -> list[str]:
     attributes = []
 
-    def get_value(attribute):
+    def get_value(attribute: Attribute):
         result = attribute.value
 
         if attribute.definition.type_name == "STRING":
@@ -874,7 +874,7 @@ def _dump_attributes(database, sort_signals, sort_attributes):
     if sort_attributes:
         attributes = sort_attributes(attributes)
 
-    ba = []
+    ba: list[str] = []
     for typ, attribute, node, message, signal, envvar in attributes:
         if typ == 'dbc':
             ba.append(f'BA_ "{attribute.definition.name}" '
@@ -904,10 +904,10 @@ def _dump_attributes(database, sort_signals, sort_attributes):
     return ba
 
 
-def _dump_attributes_rel(database, sort_signals):
-    ba_rel = []
+def _dump_attributes_rel(database: InternalDatabase, sort_signals: type_sort_signals) -> list[str]:
+    ba_rel: list[str] = []
 
-    def get_value(attribute):
+    def get_value(attribute: Attribute):
         result = attribute.value
 
         if attribute.definition.type_name == "STRING":
@@ -941,8 +941,8 @@ def _dump_attributes_rel(database, sort_signals):
     return ba_rel
 
 
-def _dump_choices(database, sort_signals, sort_choices):
-    val = []
+def _dump_choices(database: InternalDatabase, sort_signals: type_sort_signals, sort_choices: type_sort_choices) -> list[str]:
+    val: list[str] = []
 
     for message in database.messages:
         if sort_signals:
@@ -967,8 +967,8 @@ def _dump_choices(database, sort_signals, sort_choices):
     return val
 
 
-def _dump_signal_groups(database):
-    sig_group = []
+def _dump_signal_groups(database: InternalDatabase) -> list[str]:
+    sig_group: list[str] = []
 
     for message in database.messages:
         if message.signal_groups is None:
@@ -988,7 +988,7 @@ def _dump_signal_groups(database):
     return sig_group
 
 
-def _is_extended_mux_needed(messages):
+def _is_extended_mux_needed(messages: list[Message]) -> bool:
     """Check for messages with more than one mux signal or signals with
     more than one multiplexer value.
 
@@ -1012,7 +1012,7 @@ def _is_extended_mux_needed(messages):
     return False
 
 
-def _create_mux_ranges(multiplexer_ids):
+def _create_mux_ranges(multiplexer_ids: list[int]) -> list[list[int]]:
     """Create a list of ranges based on a list of single values.
 
     Example:
@@ -1024,7 +1024,7 @@ def _create_mux_ranges(multiplexer_ids):
     ordered = sorted(multiplexer_ids)
     # Anything but ordered[0] - 1
     prev_value = ordered[0]
-    ranges = []
+    ranges: list[list[int]] = []
 
     for value in ordered:
         if value == prev_value + 1:
@@ -1037,7 +1037,7 @@ def _create_mux_ranges(multiplexer_ids):
     return ranges
 
 
-def _dump_signal_mux_values(database):
+def _dump_signal_mux_values(database: InternalDatabase) -> list[str]:
     """Create multiplex entries ("SG_MUL_VAL_") if extended multiplexing
     is used.
 
@@ -1046,7 +1046,7 @@ def _dump_signal_mux_values(database):
     if not _is_extended_mux_needed(database.messages):
         return []
 
-    sig_mux_values = []
+    sig_mux_values: list[str] = []
 
     for message in database.messages:
         for signal in message.signals:
@@ -1902,7 +1902,7 @@ def try_remove_attribute(dbc, name):
         pass
 
 
-def remove_special_chars(database):
+def remove_special_chars(database: InternalDatabase) -> InternalDatabase:
     for node in database.nodes:
         new_node_name = get_dbc_name(node.name)
 
