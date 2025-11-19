@@ -2,8 +2,10 @@
 
 import re
 from collections import OrderedDict, defaultdict
+from collections.abc import Mapping
 from copy import deepcopy
 from decimal import Decimal
+from typing import cast
 
 import textparser  # type: ignore
 from textparser import (
@@ -30,8 +32,8 @@ from ...utils import (
     type_sort_choices,
     type_sort_signals,
 )
-from ..attribute import Attribute
-from ..attribute_definition import AttributeDefinition
+from ..attribute import Attribute, AttributeType
+from ..attribute_definition import AttributeDefinition, AttributeDefinitionType
 from ..bus import Bus
 from ..environment_variable import EnvironmentVariable
 from ..internal_database import InternalDatabase
@@ -181,10 +183,10 @@ ATTRIBUTE_DEFINITION_GENSIGSTARTVALUE = AttributeDefinition(
     maximum=100000000000)
 
 
-def to_int(value: typing.Union[int, str]) -> int:
+def to_int(value: int | str) -> int:
     return int(Decimal(value))
 
-def to_float(value: typing.Union[float, str]) -> float:
+def to_float(value: float | str) -> float:
     return float(Decimal(value))
 
 class Parser(textparser.Parser):
@@ -263,6 +265,8 @@ class Parser(textparser.Parser):
 
         for mo in re.finditer(token_regex, text, re.DOTALL):
             kind = mo.lastgroup
+            if kind is None:
+                raise RuntimeError("DBC did not match expected regex parser syntax!")
 
             if kind == 'SKIP':
                 pass
@@ -624,18 +628,18 @@ def _need_cycletime_def(database: InternalDatabase) -> bool:
                for m in database.messages)
 
 def _bus_is_canfd(database: InternalDatabase) -> bool:
-    if database.dbc is None or database.dbc.attributes is None:
+    if database.dbc is NotImplemented:
         return False
     bus_type = database.dbc.attributes.get('BusType', None)
     if bus_type is None:
         return False
-    return bus_type.value == 'CAN FD'  # type: ignore[no-any-return]
+    return bus_type.value == 'CAN FD'
 
 def _dump_attribute_definitions(database: InternalDatabase) -> list[str]:
     ba_def: list[str] = []
 
     if database.dbc is None:
-        definitions: OrderedDict[str, AttributeDefinition] = OrderedDict()
+        definitions: OrderedDict[str, AttributeDefinitionType] = OrderedDict()
     else:
         definitions = database.dbc.attribute_definitions
 
@@ -653,7 +657,7 @@ def _dump_attribute_definitions(database: InternalDatabase) -> list[str]:
         if 'CANFD_BRS' not in definitions:
             definitions['CANFD_BRS'] = ATTRIBUTE_DEFINITION_CANFD_BRS
 
-    def get_value(definition: AttributeDefinition, value) -> str:
+    def get_value(definition: AttributeDefinitionType, value) -> str:
         if definition.minimum is None:
             value = ''
         else:
@@ -661,13 +665,13 @@ def _dump_attribute_definitions(database: InternalDatabase) -> list[str]:
 
         return value
 
-    def get_minimum(definition: AttributeDefinition) -> str:
+    def get_minimum(definition: AttributeDefinitionType) -> str:
         return get_value(definition, definition.minimum)
 
-    def get_maximum(definition: AttributeDefinition) -> str:
+    def get_maximum(definition: AttributeDefinitionType) -> str:
         return get_value(definition, definition.maximum)
 
-    def get_kind(definition: AttributeDefinition) -> str:
+    def get_kind(definition: AttributeDefinitionType) -> str:
         return '' if definition.kind is None else definition.kind + ' '
 
     for definition in definitions.values():
@@ -690,11 +694,11 @@ def _dump_attribute_definitions_rel(database: InternalDatabase) -> list[str]:
     ba_def_rel: list[str] = []
 
     if database.dbc is None:
-        definitions = OrderedDict()
+        definitions: OrderedDict[str, AttributeDefinitionType] = OrderedDict()
     else:
         definitions = database.dbc.attribute_definitions_rel
 
-    def get_value(definition: AttributeDefinition, value) -> str:
+    def get_value(definition: AttributeDefinitionType, value) -> str:
         if definition.minimum is None:
             value = ''
         else:
@@ -702,10 +706,10 @@ def _dump_attribute_definitions_rel(database: InternalDatabase) -> list[str]:
 
         return value
 
-    def get_minimum(definition: AttributeDefinition) -> str:
+    def get_minimum(definition: AttributeDefinitionType) -> str:
         return get_value(definition, definition.minimum)
 
-    def get_maximum(definition: AttributeDefinition) -> str:
+    def get_maximum(definition: AttributeDefinitionType) -> str:
         return get_value(definition, definition.maximum)
 
     for definition in definitions.values():
@@ -728,7 +732,7 @@ def _dump_attribute_definition_defaults(database: InternalDatabase) -> list[str]
     ba_def_def: list[str] = []
 
     if database.dbc is None:
-        definitions = OrderedDict()
+        definitions: OrderedDict[str, AttributeDefinitionType] = OrderedDict()
     else:
         definitions = database.dbc.attribute_definitions
 
@@ -749,7 +753,7 @@ def _dump_attribute_definition_defaults_rel(database: InternalDatabase) -> list[
     ba_def_def_rel: list[str] = []
 
     if database.dbc is None:
-        definitions = OrderedDict()
+        definitions: OrderedDict[str, AttributeDefinitionType] = OrderedDict()
     else:
         definitions = database.dbc.attribute_definitions_rel
 
@@ -767,9 +771,9 @@ def _dump_attribute_definition_defaults_rel(database: InternalDatabase) -> list[
 
 
 def _dump_attributes(database: InternalDatabase, sort_signals: type_sort_signals, sort_attributes: type_sort_attributes) -> list[str]:
-    attributes = []
+    attributes: list[type_sort_attributes] = []
 
-    def get_value(attribute: Attribute):
+    def get_value(attribute: AttributeType) -> str | int | float:
         result = attribute.value
 
         if attribute.definition.type_name == "STRING":
@@ -796,28 +800,27 @@ def _dump_attributes(database: InternalDatabase, sort_signals: type_sort_signals
 
     for message in database.messages:
         # retrieve the ordered dictionary of message attributes
-        msg_attributes = OrderedDict()
-        if message.dbc is not None and message.dbc.attributes is not None:
+        msg_attributes: OrderedDict[str, AttributeType] = OrderedDict()
+        if message.dbc is not None:
             msg_attributes.update(message.dbc.attributes)
 
         # synchronize the attribute for the message cycle time with
         # the cycle time specified by the message object
-        gen_msg_cycle_time_def: AttributeDefinition  # type: ignore[annotation-unchecked]
         msg_cycle_time = message.cycle_time or 0
-        if gen_msg_cycle_time_def := database.dbc.attribute_definitions.get("GenMsgCycleTime"):
-            if msg_cycle_time != gen_msg_cycle_time_def.default_value:
-                msg_attributes['GenMsgCycleTime'] = Attribute(
-                    value=msg_cycle_time,
-                    definition=gen_msg_cycle_time_def,
-                )
+        if database.dbc is not None:
+            if gen_msg_cycle_time_def := cast('AttributeDefinition[int]', database.dbc.attribute_definitions.get("GenMsgCycleTime")):
+                if msg_cycle_time != gen_msg_cycle_time_def.default_value:
+                    msg_attributes['GenMsgCycleTime'] = Attribute[int](
+                        value=msg_cycle_time,
+                        definition=gen_msg_cycle_time_def,
+                    )
+                elif 'GenMsgCycleTime' in msg_attributes:
+                    del msg_attributes['GenMsgCycleTime']
             elif 'GenMsgCycleTime' in msg_attributes:
                 del msg_attributes['GenMsgCycleTime']
-        elif 'GenMsgCycleTime' in msg_attributes:
-            del msg_attributes['GenMsgCycleTime']
 
         # if bus is CAN FD, set VFrameFormat
-        v_frame_format_def: AttributeDefinition  # type: ignore[annotation-unchecked]
-        if v_frame_format_def := database.dbc.attribute_definitions.get("VFrameFormat"):
+        if v_frame_format_def := cast('AttributeDefinition[str]', database.dbc.attribute_definitions.get("VFrameFormat")):
             if message.protocol == 'j1939':
                 v_frame_format_str = 'J1939PG'
             elif message.is_fd and message.is_extended_frame:
@@ -851,8 +854,8 @@ def _dump_attributes(database: InternalDatabase, sort_signals: type_sort_signals
             signals = message.signals
         for signal in signals:
             # retrieve the ordered dictionary of signal attributes
-            sig_attributes = OrderedDict()
-            if signal.dbc is not None and signal.dbc.attributes is not None:
+            sig_attributes: OrderedDict[str, AttributeType] = OrderedDict()
+            if signal.dbc is not None:
                 sig_attributes = signal.dbc.attributes
 
             # synchronize the attribute for the signal start value with
@@ -1147,8 +1150,8 @@ def _load_attribute_definition_relation_defaults(tokens):
     return defaults
 
 
-def _load_attributes(tokens, definitions):
-    attributes = OrderedDict()
+def _load_attributes(tokens, definitions: Mapping[str, AttributeDefinitionType]):
+    attributes: dict[str | int, dict] = OrderedDict()
     attributes['node'] = OrderedDict()
     attributes['envvar'] = OrderedDict()
 
@@ -1297,7 +1300,7 @@ def _load_value_tables(tokens):
 
 
 def _load_environment_variables(tokens, comments, attributes, attribute_definitions):
-    environment_variables = OrderedDict()
+    environment_variables: dict[str, EnvironmentVariable] = OrderedDict()
 
     for env_var in tokens.get('EV_', []):
         short_name = env_var[1]
@@ -1340,7 +1343,7 @@ def _load_message_senders(tokens, attributes):
 
     """
 
-    message_senders = defaultdict(list)
+    message_senders: dict[int, list[str]] = defaultdict(list)
 
     for senders in tokens.get('BO_TX_BU_', []):
         frame_id = int(senders[1])
@@ -1403,7 +1406,7 @@ def _load_signal_groups(tokens, attributes):
     signal_groups = defaultdict(list)
 
 
-    def get_attributes(frame_id_dbc, signal):
+    def get_attributes(frame_id_dbc: int, signal: Signal):
         """Get attributes for given signal.
 
         """
@@ -1413,7 +1416,7 @@ def _load_signal_groups(tokens, attributes):
         except KeyError:
             return None
 
-    def get_signal_name(frame_id_dbc, name):
+    def get_signal_name(frame_id_dbc: int, name: str):
         signal_attributes = get_attributes(frame_id_dbc, name)
 
         try:
@@ -1438,7 +1441,7 @@ def _load_signals(tokens,
                   choices,
                   signal_types,
                   signal_multiplexer_values,
-                  frame_id_dbc,
+                  frame_id_dbc: int,
                   multiplexer_signal):
     signal_to_multiplexer = {}
 
@@ -1519,7 +1522,7 @@ def _load_signals(tokens,
         elif signal[0] != multiplexer_signal:
             return multiplexer_signal
 
-    def get_receivers(receivers):
+    def get_receivers(receivers: list[str]):
         if receivers == ['Vector__XXX']:
             receivers = []
 
@@ -1537,7 +1540,7 @@ def _load_signals(tokens,
         else:
             return num(maximum)
 
-    def get_is_float(frame_id_dbc, signal):
+    def get_is_float(frame_id_dbc: int, signal):
         """Get is_float for given signal.
 
         """
@@ -1547,7 +1550,7 @@ def _load_signals(tokens,
         except KeyError:
             return False
 
-    def get_signal_name(frame_id_dbc, name):
+    def get_signal_name(frame_id_dbc: int, name: str):
         signal_attributes = get_attributes(frame_id_dbc, name)
 
         try:
@@ -1555,7 +1558,7 @@ def _load_signals(tokens,
         except (KeyError, TypeError):
             return name
 
-    def get_signal_initial_value(frame_id_dbc, name):
+    def get_signal_initial_value(frame_id_dbc: int, name: str):
         signal_attributes = get_attributes(frame_id_dbc, name)
 
         try:
@@ -1563,7 +1566,7 @@ def _load_signals(tokens,
         except (KeyError, TypeError):
             return None
 
-    def get_signal_spn(frame_id_dbc, name):
+    def get_signal_spn(frame_id_dbc: int, name: str):
         signal_attributes = get_attributes(frame_id_dbc, name)
         if signal_attributes is not None and 'SPN' in signal_attributes:
             if (value := signal_attributes['SPN'].value) is not None:
@@ -1640,7 +1643,7 @@ def _load_messages(tokens,
 
     """
 
-    def get_attributes(frame_id_dbc):
+    def get_attributes(frame_id_dbc: int):
         """Get attributes for given message.
 
         """
@@ -1660,7 +1663,7 @@ def _load_messages(tokens,
         except KeyError:
             return None
 
-    def get_send_type(frame_id_dbc):
+    def get_send_type(frame_id_dbc: int):
         """Get send type for a given message.
 
         """
@@ -1683,7 +1686,7 @@ def _load_messages(tokens,
 
         return result
 
-    def get_cycle_time(frame_id_dbc):
+    def get_cycle_time(frame_id_dbc: int):
         """Get cycle time for a given message.
 
         """
@@ -1701,7 +1704,7 @@ def _load_messages(tokens,
         return gen_msg_cycle_time_def.default_value or None
 
 
-    def get_frame_format(frame_id_dbc):
+    def get_frame_format(frame_id_dbc: int):
         """Get frame format for a given message"""
 
         message_attributes = get_attributes(frame_id_dbc)
@@ -1719,7 +1722,7 @@ def _load_messages(tokens,
 
         return frame_format
 
-    def get_protocol(frame_id_dbc):
+    def get_protocol(frame_id_dbc: int):
         """Get protocol for a given message.
 
         """
@@ -1731,7 +1734,7 @@ def _load_messages(tokens,
         else:
             return None
 
-    def get_message_name(frame_id_dbc, name):
+    def get_message_name(frame_id_dbc: int, name):
         message_attributes = get_attributes(frame_id_dbc)
 
         try:
@@ -1739,7 +1742,7 @@ def _load_messages(tokens,
         except (KeyError, TypeError):
             return name
 
-    def get_signal_groups(frame_id_dbc):
+    def get_signal_groups(frame_id_dbc: int):
         try:
             return signal_groups[frame_id_dbc]
         except KeyError:
@@ -1819,7 +1822,7 @@ def _load_messages(tokens,
     return messages
 
 
-def _load_version(tokens):
+def _load_version(tokens) -> str | None:
     return tokens.get('VERSION', [[None, None]])[0][1]
 
 
@@ -1858,7 +1861,7 @@ def _load_nodes(tokens, comments, attributes, definitions):
     return nodes
 
 
-def get_attribute_definition(database, name, default):
+def get_attribute_definition(database: InternalDatabase, name: str, default: AttributeDefinitionType) -> AttributeDefinitionType:
     if database.dbc is None:
         database.dbc = DbcSpecifics()
 
@@ -1874,29 +1877,27 @@ def get_long_envvar_name_attribute_definition(database):
                                     ATTRIBUTE_DEFINITION_LONG_ENVVAR_NAME)
 
 
-def get_long_node_name_attribute_definition(database):
+def get_long_node_name_attribute_definition(database: InternalDatabase) -> AttributeDefinitionType:
     return get_attribute_definition(database,
                                     'SystemNodeLongSymbol',
                                     ATTRIBUTE_DEFINITION_LONG_NODE_NAME)
 
 
-def get_long_message_name_attribute_definition(database):
+def get_long_message_name_attribute_definition(database: InternalDatabase) -> AttributeDefinitionType:
     return get_attribute_definition(database,
                                     'SystemMessageLongSymbol',
                                     ATTRIBUTE_DEFINITION_LONG_MESSAGE_NAME)
 
 
-def get_long_signal_name_attribute_definition(database):
+def get_long_signal_name_attribute_definition(database: InternalDatabase) -> AttributeDefinitionType:
     return get_attribute_definition(database,
                                     'SystemSignalLongSymbol',
                                     ATTRIBUTE_DEFINITION_LONG_SIGNAL_NAME)
 
 
-def try_remove_attribute(dbc, name):
-    try:
+def try_remove_attribute(dbc: DbcSpecifics | None, name: str) -> None:
+    if dbc and name in dbc.attributes:
         dbc.attributes.pop(name)
-    except (KeyError, AttributeError):
-        pass
 
 
 def remove_special_chars(database: InternalDatabase) -> InternalDatabase:
@@ -2102,8 +2103,8 @@ def dump_string(database: InternalDatabase,
                           sig_mux_values='\r\n'.join(sig_mux_values))
 
 
-def get_definitions_dict(definitions, defaults):
-    result = OrderedDict()
+def get_definitions_dict(definitions, defaults) -> OrderedDict[str, AttributeDefinitionType]:
+    result: OrderedDict[str, AttributeDefinitionType] = OrderedDict()
 
     def convert_value(definition, value):
         if definition.type_name in ['INT', 'HEX']:
